@@ -166,6 +166,37 @@ parse_debug_level(sym::Symbol) = (
     sym === :all  ? Lib.FLIDEBUG_ALL  :
     error("unknown debug level"))
 
+"""
+    LibFLI.print_camera_info([io=stdout,] cam)
+
+prints detailed information to output stream `io` about camera `cam`.
+
+Keywords `pfx1` and `pfx2` can be used to customize the output.
+
+"""
+print_camera_info(cam::Device; kwds...) =
+    print_camera_info(stdout, cam; kwds...)
+
+function print_camera_info(io::IO, cam::Device; pfx1 = " ├─ ", pfx2 = " └─ ")
+    print(io, pfx1, "Device Model: \"", get_model(cam), "\"\n")
+    print(io, pfx1, "Serial Number: \"", get_serial_string(cam), "\"\n")
+    print(io, pfx1, "Hardware Revision: ", get_hardware_revision(cam), "\n")
+    print(io, pfx1, "Firmware Revision: ", get_firmware_revision(cam), "\n")
+    print(io, pfx1, "Library Version: \"", get_lib_version(), "\"\n")
+    x0, y0, x1, y1 = get_array_area(cam)
+    print(io, pfx1, "Detector Area: ", x1 - x0, " × ", y1 - y0, " pixels, [",
+          x0, ":", x1 - 1, "] × [", y0, ":", y1 - 1, "]\n")
+    x0, y0, x1, y1 = get_visible_area(cam)
+    print(io, pfx1, "Visible Area: ", x1 - x0, " × ", y1 - y0, " pixels, [",
+          x0, ":", x1 - 1, "] × [", y0, ":", y1 - 1, "]\n")
+    width, x0, xbin, height, y0, ybin = get_readout_dimensions(cam)
+    print(io, pfx1, "Image Area: $width × $height pixels at ",
+          "offsets ($x0,$y0) and with $xbin×$ybin binning\n")
+    xsize, ysize = get_pixel_size(cam)
+    print(io, pfx1, "Pixel Size: $(1e6*xsize) µm × $(1e6*ysize) µm\n")
+    print(io, pfx2, "Temperature: $(get_temperature(cam))°C\n")
+end
+
 function get_model(obj::Device)
     buf = Array{UInt8}(undef, 256)
     @check FLIGetModel(obj.dev, buf, length(buf))
@@ -296,7 +327,7 @@ function set_exposure_time(cam::Device, secs::Real)
 end
 
 """
-    LibFLI.set_frame_type(cam, sym) =
+    LibFLI.set_frame_type(cam, sym)
 
 sets the frame type for camera `cam`.  Argument `sym` can be `:normal` for a
 normal frame where the shutter opens, `:dark` for a dark frame where the
@@ -546,8 +577,19 @@ end
 end_exposure(cam::Device) = @check FLIEndExposure(cam.dev)
 trigger_exposure(cam::Device) = @check FLITriggerExposure(cam.dev)
 
-set_fan_speed(cam::Device, fanspeed) =
-    @check FLISetFanSpeed(cam.dev, fanspeed)
+"""
+    LibFLI.set_fan_speed(cam, onoff)
+
+sets the fan speed of camera `cam`, argument `onoff` is `:on` or `:off`.
+
+"""
+set_fan_speed(cam::Device, onoff::Symbol) =
+    @check FLISetFanSpeed(cam.dev, parse_fan_speed(onoff))
+
+parse_fan_speed(sym::Symbol) = (
+    sym === :off ? Lib.FLI_FAN_SPEED_OFF :
+    sym === :on  ? Lib.FLI_FAN_SPEED_ON :
+    error("unknown fan speed"))
 
 # FIXME: FLIReadIOPort(flidev_t dev, long *ioportset);
 # FIXME: FLIWriteIOPort(flidev_t dev, long ioportset);
