@@ -8,22 +8,30 @@ This package provides a Julia interface to [Finger Lakes Instrumentation
 
 ```julia
 using LibFLI
-LibFLI.set_debug_level("", :all)    # set the debug level
-LibFLI.get_lib_version()            # get the library version
-cam = LibFLI.Device("/dev/usbfli0") # open 1st USB camera
-LibFLI.print_camera_info(cam)       # print may characteristics of camera
+FLI.set_debug_level("", :all)    # set the debug level
+FLI.get_lib_version()            # get the library version
+cam = FLI.Device("/dev/usbfli0") # open 1st USB camera
+FLI.print_camera_info(cam)       # print characteristics of camera
 ```
 
 Method `close(cam)` can be called to eventually close the device associated to
 object `cam` but this is not mandatory as this is automatically done when the
 object is reclaimed by garbage collector.
 
-The API attempts to reflect that of the C library.  Constants are replaced by
-symbolic names.  For example:
+As you may have noticed, `using LibFLI` exports symbol `FLI` which is an alias
+for `LibFLI`.  This simplify the writting of code as it allows you to use the
+prefix `FLI.func` instead of `LibFLI.func` for calling function `func`.  If you
+do not want this feature, call `import LibFLI` instead.
+
+The API attempts to reflect that of the C library.  For readbility, function
+names are in [*snake case*](https://en.wikipedia.org/wiki/Snake_case) style and
+without the `FLI` prefix (which is replaced by the name of the module); as an
+example, `FLITriggerExposure` becomes `FLI.trigger_exposure`.  Constants are
+replaced by symbolic names.  For example:
 
 ```julia
-LibFLI.set_fan_speed(cam, :on)  # to switch the fan on
-LibFLI.set_fan_speed(cam, :off) # to switch the fan off
+FLI.set_fan_speed(cam, :on)  # to switch the fan on
+FLI.set_fan_speed(cam, :off) # to switch the fan off
 ```
 
 ## Installation

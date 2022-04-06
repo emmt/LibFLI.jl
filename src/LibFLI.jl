@@ -1,12 +1,16 @@
 module LibFLI
 
+export FLI, FLIException
+
 include("libcalls.jl")
+
+const FLI = LibFLI
 
 # FLI cameras are either 8 or 16 bits.
 const PixelType = Union{UInt8,UInt16}
 
 """
-    LibFLI.FLIException(func, code)
+    FLIException(func, code)
 
 yields a exception representing an error `code` returned by function `func` of
 the LibFLI C library.
@@ -23,7 +27,7 @@ function Base.showerror(io::IO, ex::FLIException)
 end
 
 """
-    LibFLI.check(func, status)
+    FLI.check(func, status)
 
 checks the status returned by function `func` of the LibFLI C library and
 throws a `FLIException` exception in case of error.
@@ -35,7 +39,7 @@ function check(func::Symbol, status::Lib.Status)
 end
 
 """
-    LibFLI.@check FLIFunc(args...)
+    FLI.@check FLIFunc(args...)
 
 calls the function `FLIFunc` of the LibFLI SDK and check its status.
 
@@ -56,7 +60,7 @@ mutable struct Device
 end
 
 """
-    LibFLI.Device(name; interface = :usb, device = :camera) -> obj
+    FLI.Device(name; interface = :usb, device = :camera) -> obj
 
 opens FLI device `name`.  Keywords `interface` and `device` are to specifiy the
 interface and the type of device as symbolic names.  The possibilities are:
@@ -73,7 +77,7 @@ reclaimed by garbage collector.
 
 Examples:
 
-    cam = LibFLI.Device("/dev/fliusb0"; device = :camera, interface = :usb)
+    cam = FLI.Device("/dev/fliusb0"; device = :camera, interface = :usb)
 
 """
 function Device(name::AbstractString,;
@@ -123,7 +127,7 @@ parse_device_domain(sym::Symbol) = (
     error("unknown device type"))
 
 """
-    LibFLI.get_lib_version() -> str
+    FLI.get_lib_version() -> str
 
 yields the version of the FLI C library.
 
@@ -135,7 +139,7 @@ function get_lib_version()
 end
 
 """
-    LibFLI.set_debug_level(host, level)
+    FLI.set_debug_level(host, level)
 
 enables debugging of API operations and communications.  Use this function in
 combination with `FLIDebug` to assist in diagnosing problems that may be
@@ -167,7 +171,7 @@ parse_debug_level(sym::Symbol) = (
     error("unknown debug level"))
 
 """
-    LibFLI.print_camera_info([io=stdout,] cam)
+    FLI.print_camera_info([io=stdout,] cam)
 
 prints detailed information to output stream `io` about camera `cam`.
 
@@ -204,7 +208,7 @@ function get_model(obj::Device)
 end
 
 """
-    LibFLI.get_pixel_size(cam) -> (xsiz, ysiz)
+    FLI.get_pixel_size(cam) -> (xsiz, ysiz)
 
 yields the pixel size (in meters) of the camera `cam`.
 
@@ -229,7 +233,7 @@ function get_firmware_revision(obj::Device)
 end
 
 """
-    LibFLI.get_array_area(cam) -> (x0, y0, x1, y1)
+    FLI.get_array_area(cam) -> (x0, y0, x1, y1)
 
 yields the area of the sensor array of camera `cam`.  Coordinates `(x0,y0)` and
 `(x1,y1)` respectively define the upper-left and lower-right corner of the
@@ -246,7 +250,7 @@ function get_array_area(cam::Device)
 end
 
 """
-    LibFLI.get_visible_area(cam) -> (x0, y0, x1, y1)
+    FLI.get_visible_area(cam) -> (x0, y0, x1, y1)
 
 yields the visible area of the sensor array of camera `cam`.  Coordinates
 `(x0,y0)` and `(x1,y1)` respectively define the upper-left and lower-right
@@ -278,7 +282,7 @@ function get_readout_dimensions(cam::Device)
 end
 
 """
-    LibFLI.set_image_area(cam, x0, y0, x1, y1)
+    FLI.set_image_area(cam, x0, y0, x1, y1)
 
 sets the image area for camera `cam`.  The image area include the (physical)
 pixels whose coordinates `(x,y)` are such that:
@@ -287,7 +291,7 @@ pixels whose coordinates `(x,y)` are such that:
     y0 ≤ y < y0 + (y1 - y0)*ybin
 
 where `xbin` and `ybin` are the binning factors (see
-[`LibFLI.set_binning`](@ref)).  In other words, the image area starts at offset
+[`FLI.set_binning`](@ref)).  In other words, the image area starts at offset
 `(x0,y0)` (in physical pixels), and is a rectangle of `width×height`
 macro-pixels with:
 
@@ -304,7 +308,7 @@ function set_image_area(cam::Device,
 end
 
 """
-    LibFLI.set_binning(cam, xbin, ybin)
+    FLI.set_binning(cam, xbin, ybin)
 
 sets the size (in physical pixels) of the macro-pixels for subsequent images
 acquirred by camera `cam`.
@@ -316,7 +320,7 @@ function set_binning(cam::Device, xbin::Integer, ybin::Integer)
 end
 
 """
-    LibFLI.set_exposure_time(cam, secs)
+    FLI.set_exposure_time(cam, secs)
 
 sets the exposure time to be `secs` seconds for camera `cam`.
 
@@ -327,7 +331,7 @@ function set_exposure_time(cam::Device, secs::Real)
 end
 
 """
-    LibFLI.set_frame_type(cam, sym)
+    FLI.set_frame_type(cam, sym)
 
 sets the frame type for camera `cam`.  Argument `sym` can be `:normal` for a
 normal frame where the shutter opens, `:dark` for a dark frame where the
@@ -347,7 +351,7 @@ parse_frame_type(sym::Symbol) = (
 cancel_exposure(cam::Device) = @check FLICancelExposure(cam.dev)
 
 """
-    LibFLI.get_exposure_status(cam) -> secs
+    FLI.get_exposure_status(cam) -> secs
 
 yields the number of seconds to wait for the end of the exposure by camera
 `cam`.
@@ -391,7 +395,7 @@ function get_cooler_power(obj::Device)
 end
 
 """
-    LibFLI.grab_frame([T=UInt16,] cam) -> img
+    FLI.grab_frame([T=UInt16,] cam) -> img
 
 downloads the frame from camera `cam`.  Optional argument `T` is to specify the
 pixel type (either `UInt8` or `UInt16`).  Specifying the wrong pixel type may
@@ -405,7 +409,7 @@ function grab_frame(T::Type{<:PixelType}, cam::Device)
 end
 
 """
-    LibFLI.grab_frame!(cam, img) -> img
+    FLI.grab_frame!(cam, img) -> img
 
 downloads the frame from camera `cam` to the image `img` and returns the image.
 The element type of the image (either `UInt8` or `UInt16`) must match the pixel
@@ -420,7 +424,7 @@ function grab_frame!(cam::Device, img::Matrix{<:PixelType})
 end
 
 """
-    LibFLI.unsafe_grab_frame!(cam, img) -> img
+    FLI.unsafe_grab_frame!(cam, img) -> img
 
 downloads the frame from camera `cam` to image `img` and returns the image.
 
@@ -440,7 +444,7 @@ function unsafe_grab_frame!(cam::Device, img::Matrix{<:PixelType})
 end
 
 """
-    LibFLI.unsafe_grab_row!(cam, img, j)
+    FLI.unsafe_grab_row!(cam, img, j)
 
 downloads the next available row of the image acquirred by camera `cam`
 and stores it in the stores the `j`-th row of image `img`.
@@ -460,7 +464,7 @@ stop_video_mode(cam::Device) = @check FLIStopVideoMode(cam.dev)
 start_video_mode(cam::Device) = @check FLIStartVideoMode(cam.dev)
 
 """
-    LibFLI.grab_video_frame([T = UInt16,] cam) -> img
+    FLI.grab_video_frame([T = UInt16,] cam) -> img
 
 yields a video frame from camera `cam`.  Optional argument `T` is to specify
 the pixel type (either `UInt8` or `UInt16`).  Specifying the wrong pixel type
@@ -474,7 +478,7 @@ function grab_video_frame(T::Type{<:PixelType}, cam::Device)
 end
 
 """
-    LibFLI.unsafe_grab_video_frame!(cam, img) -> img
+    FLI.unsafe_grab_video_frame!(cam, img) -> img
 
 stores video frame from camera `cam` into image `img` and retuns it.
 
@@ -495,7 +499,7 @@ set_nflushes(cam::Device, nflushes::Integer) =
     @check FLISetNFlushes(cam.dev, nflushes)
 
 """
-    LibFLI.set_bit_depth(cam, T)
+    FLI.set_bit_depth(cam, T)
 
 sets the bit depth for camera `cam` for pixels of type `T` (either `UInt8` or
 `UInt16`).
@@ -512,7 +516,7 @@ Base.lock(obj::Device) = @check FLILockDevice(obj.dev)
 Base.unlock(obj::Device) = @check FLIUnLockDevice(obj.dev)
 
 """
-    LibFLI.control_shutter(cam, ctrl)
+    FLI.control_shutter(cam, ctrl)
 
 controls the shutter of camera `cam`, argument `ctrl` can be one of `:close`,
 `:open`, `:external_trigger`, `:external_trigger_low`,
@@ -578,7 +582,7 @@ end_exposure(cam::Device) = @check FLIEndExposure(cam.dev)
 trigger_exposure(cam::Device) = @check FLITriggerExposure(cam.dev)
 
 """
-    LibFLI.set_fan_speed(cam, onoff)
+    FLI.set_fan_speed(cam, onoff)
 
 sets the fan speed of camera `cam`, argument `onoff` is `:on` or `:off`.
 
