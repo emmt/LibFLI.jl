@@ -66,16 +66,14 @@ end
 ```
 
 
+## Completeness
 
-## Missing functions
-
-Not all functions of the FLI SDK are available.  This is a work in progress.
-
-List oriented functions (`FLICreateList`, `FLIListFirst`, `FLIListNext`,
-`FLIFreeList`, `FLIList`, and `FLIFreeList`) are not directly available, as
-their usage is superseded by `FLI.foreach_device` which provides a much better
-interface and internally calls `FLICreateList`, `FLIListFirst`, `FLIListNext`,
-and `FLIFreeList`.
+Almost all functions of the FLI SDK are available.  Function `FLIUsbBulkIO` is
+only available in the `Lib` sub-module.  List oriented functions
+(`FLICreateList`, `FLIListFirst`, `FLIListNext`, `FLIFreeList`, `FLIList`, and
+`FLIFreeList`) are not directly available as their usage is superseded by
+`FLI.foreach_device` which provides a much better interface and internally
+calls `FLICreateList`, `FLIListFirst`, `FLIListNext`, and `FLIFreeList`.
 
 
 ## Installation

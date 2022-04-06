@@ -93,6 +93,7 @@ function Device(name::AbstractString;
     domain = parse_interface_domain(interface)|parse_device_domain(device)
     return Device(name, domain)
 end
+
 function Device(name::AbstractString, domain::Integer)
     dev = Ref{Lib.flidev_t}(Lib.FLI_INVALID_DEVICE)
     @check FLIOpen(dev, name, domain)
@@ -734,32 +735,152 @@ function list_devices(io::IO, args::Symbol...)
     end
 end
 
-# FIXME: FLIReadIOPort(flidev_t dev, long *ioportset);
-# FIXME: FLIWriteIOPort(flidev_t dev, long ioportset);
-# FIXME: FLIConfigureIOPort(flidev_t dev, long ioportset);
+"""
+    FLI.read_io_port(cam)
 
-# FIXME: FLIGetFilterName(flidev_t dev, long filter, char *name, size_t len);
-# FIXME: FLISetActiveWheel(flidev_t dev, long wheel);
-# FIXME: FLIGetActiveWheel(flidev_t dev, long *wheel);
+reads the I/O port of a camera `cam` and yields the resulting i/o data.
 
-# FIXME: FLISetFilterPos(flidev_t dev, long filter);
-# FIXME: FLIGetFilterPos(flidev_t dev, long *filter);
-# FIXME: FLIGetFilterCount(flidev_t dev, long *filter);
+"""
+function read_io_port(cam::Device)
+    ioportset = Ref{Clong}()
+    @check FLIReadIOPort(cam.dev, ioportset)
+    return ioportset[]
+end
 
-# FIXME: FLIStepMotor(flidev_t dev, long steps);
-# FIXME: FLIStepMotorAsync(flidev_t dev, long steps);
-# FIXME: FLIGetStepperPosition(flidev_t dev, long *position);
-# FIXME: FLIGetStepsRemaining(flidev_t dev, long *steps);
-# FIXME: FLIHomeFocuser(flidev_t dev);
+"""
+    FLI.write_io_port(cam, ioportset)
 
-# FIXME: FLIGetFocuserExtent(flidev_t dev, long *extent);
-# FIXME: FLIUsbBulkIO(flidev_t dev, int ep, void *buf, long *len);
+writes `ioportset` to the I/O port of a camera `cam`.
 
-# FIXME: FLISetVerticalTableEntry(flidev_t dev, long index, long height, long bin, long mode);
-# FIXME: FLIGetVerticalTableEntry(flidev_t dev, long index, long *height, long *bin, long *mode);
+"""
+write_io_port(cam::Device, ioportset::Integer) =
+    @check FLIWriteIOPort(cam.dev, ioportset)
 
-# FIXME: FLIEnableVerticalTable(flidev_t dev, long width, long offset, long flags);
-# FIXME: FLIReadUserEEPROM(flidev_t dev, long loc, long address, long length, void *rbuf);
-# FIXME: FLIWriteUserEEPROM(flidev_t dev, long loc, long address, long length, void *wbuf);
+"""
+    FLI.configure_io_port(cam, data)
+
+writes `data` to the I/O port of a camera `cam`.
+
+"""
+configure_io_port(cam::Device, ioportset::Integer) =
+    @check FLIConfigureIOPort(cam.dev, ioportset)
+
+function get_filter_name(obj::Device)
+    buf = Array{UInt8}(undef, 256)
+    @check FLIGetFilterName(obj.dev, buf, length(buf))
+    return unsafe_string(pointer(buf))
+end
+
+set_filter_pos(obj::Device, pos::Integer) =
+    @check FLISetFilterPos(obj.dev, pos)
+
+function get_filter_pos(obj::Device)
+    pos = Ref{Clong}()
+    @check FLIGetFilterPos(obj.dev, pos)
+    return pos[]
+end
+
+function get_filter_count(obj::Device)
+    cnt = Ref{Clong}()
+    @check FLIGetFilterCount(obj.dev, cnt)
+    return cnt[]
+end
+
+set_active_wheel(obj::Device, wheel::Integer) =
+    @check FLISetActiveWheel(obj.dev, wheel)
+
+function get_active_wheel(obj::Device)
+    wheel = Ref{Clong}()
+    @check FLIGetActiveWheel(obj.dev, wheel)
+    return wheel[]
+end
+
+step_motor(obj::Device, steps::Integer) =
+    @check FLIStepMotor(obj.dev, steps)
+
+step_motor_async(obj::Device, steps::Integer) =
+    @check FLIStepMotorAsync(obj.dev, steps)
+
+function get_stepper_position(obj::Device)
+    pos = Ref{Clong}()
+    @check FLIGetStepperPosition(obj.dev, pos)
+    return pos[]
+end
+
+function get_steps_remaining(obj::Device)
+    steps = Ref{Clong}()
+    @check FLIGetStepsRemaining(obj.dev, steps)
+    return steps[]
+end
+
+home_focuser(obj::Device) = @check FLIHomeFocuser(obj.dev)
+
+function get_focuser_extent(obj::Device)
+    extent = Ref{Clong}()
+    @check FLIGetFocuserExtent(obj.dev, extent)
+    return extent[]
+end
+
+function set_vertical_table_entry(obj::Device, index::Integer, height::Integer,
+                                  bin::Integer, mode::Integer)
+    @check FLISetVerticalTableEntry(obj.dev, index, height, bin, mode)
+end
+
+function get_vertical_table_entry(obj::Device, index::Integer)
+    height = Ref{Clong}()
+    bin = Ref{Clong}()
+    mode = Ref{Clong}()
+    @check FLIGetVerticalTableEntry(obj.dev, index, height, bin, mode)
+    return (height[], bin[], mode[])
+end
+
+function enable_vertical_table(obj::Device, width::Integer,
+                               offset::Integer, flags::Integer)
+    @check FLIEnableVerticalTable(obj.dev, width, offset, flags)
+end
+
+#=
+# FIXME: Don't known what is this function.
+function usb_bulk_io(obj::Device, ep::Integer, buf::Ptr)
+    len = Ref{Clong}()
+    @check FLIUsbBulkIO(obj.dev, ep, buf, len)
+    return len[]
+end
+=#
+
+"""
+    FLI.read_user_eeprom(obj, loc, nbytes) -> data
+
+reads user EEPROM.
+
+"""
+function read_user_eeprom(obj::Device, loc::Symbol, address::Integer,
+                          nbytes::Integer)
+    return read_user_eeprom!(obj, loc, address, Array{UInt8}(undef, nbytes))
+end
+
+function read_user_eeprom!(obj::Device, loc::Symbol, address::Integer,
+                           data::Vector{UInt8})
+    @check FLIReadUserEEPROM(obj.dev, parse_eeprom_location(loc),
+                             address, sizeof(data), data)
+    return data
+end
+
+"""
+    FLI.write_user_eeprom(obj, loc, data)
+
+writes user EEPROM.
+
+"""
+function write_user_eeprom(obj::Device, loc::Symbol, address::Integer,
+                           data::Vector{UInt8})
+    @check FLIWriteUserEEPROM(obj.dev, parse_eeprom_location(loc),
+                              address, sizeof(data), data)
+end
+
+parse_eeprom_location(sym::Symbol) = (
+    sym === :user ? Lib.FLI_EEPROM_USER :
+    sym === :pixel_map ? Lib.FLI_EEPROM_PIXEL_MAP :
+    error("unknown EEPROM location"))
 
 end # module
