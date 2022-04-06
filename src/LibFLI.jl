@@ -79,11 +79,21 @@ Examples:
 
     cam = FLI.Device("/dev/fliusb0"; device = :camera, interface = :usb)
 
+----
+
+    FLI.Device(name, domain) -> obj
+
+opens FLI device `name` in `domain`.  This syntax is useful for the
+[`FLI.foreach_device`](@ref) method.
+
 """
-function Device(name::AbstractString,;
+function Device(name::AbstractString;
                 interface::Symbol = :usb,
                 device::Symbol = :camera)
     domain = parse_interface_domain(interface)|parse_device_domain(device)
+    return Device(name, domain)
+end
+function Device(name::AbstractString, domain::Integer)
     dev = Ref{Lib.flidev_t}(Lib.FLI_INVALID_DEVICE)
     @check FLIOpen(dev, name, domain)
     obj = Device()
@@ -363,17 +373,35 @@ function get_exposure_status(cam::Device)
     return timeleft[]/1e3
 end
 
-# Set temperature (in °C).
-set_temperature(obj::Device, temp::Real) =
-    @check FLISetTemperature(obj.dev, temp)
+"""
+    FLI.set_temperature(cam, temp)
 
-# Get temperature (in °C).
-function get_temperature(obj::Device)
-    val = Ref{Cdouble}()
-    @check FLIGetTemperature(obj.dev, val)
-    return val[]
+sets the target temperature for camera `cam` to be `temp` in °C.  The valid
+range of temperatures is from -55°C to 45°C.
+
+"""
+set_temperature(cam::Device, temp::Real) =
+    @check FLISetTemperature(cam.dev, temp)
+
+"""
+    FLI.get_temperature(cam) -> temp
+
+yields the current temperature of camera `cam` in °C.
+
+"""
+function get_temperature(cam::Device)
+    temp = Ref{Cdouble}()
+    @check FLIGetTemperature(cam.dev, temp)
+    return temp[]
 end
 
+"""
+    FLI.read_temperature(obj, chn) -> temp
+
+yields the current temperature of device `obj` in °C and for channel `chn`.
+Argument `chn` is one of `:internal`, `:external`, `:ccd`, or `:base`.
+
+"""
 function read_temperature(obj::Device, channel::Symbol)
     temp = Ref{Cdouble}()
     @check FLIReadTemperature(
@@ -386,11 +414,17 @@ parse_temperature_channel(sym::Symbol) = (
     sym === :external ? Lib.FLI_TEMPERATURE_EXTERNAL :
     sym === :ccd      ? Lib.FLI_TEMPERATURE_CCD :
     sym === :base     ? Lib.FLI_TEMPERATURE_BASE :
-    error("unknown temerature channel"))
+    error("unknown temperature channel"))
 
-function get_cooler_power(obj::Device)
+"""
+    FLI.get_cooler_power(cam) -> temp
+
+yields the current  cooler power level of camera `cam` in percent.
+
+"""
+function get_cooler_power(cam::Device)
     val = Ref{Cdouble}()
-    @check FLIGetCoolerPower(obj.dev, val)
+    @check FLIGetCoolerPower(cam.dev, val)
     return val[]
 end
 
@@ -595,12 +629,114 @@ parse_fan_speed(sym::Symbol) = (
     sym === :on  ? Lib.FLI_FAN_SPEED_ON :
     error("unknown fan speed"))
 
+"""
+    FLI.foreach_device(f, args...)
+
+calls function `f` for each FLI device matching interfaces and/or device types
+listed in `args...` which are symbolic names as the ones accepted by the
+keywords of the [`FLI.Device`](@ref) constructor.   The function
+is called as:
+
+    f(domain, filename, devname)
+
+with `domain` an integer specifying the interface and device type, `filename`
+the associated file name, and `devname` the name of the device.
+
+For instance to list all USB connected cameras:
+
+    function walker(domain, filename, devname)
+        dev = FLI.Device(filename, domain)
+        println("File: \"\$filename\", name: \"\$devname\", domain: \$domain")
+        FLI.print_camera_info(dev)
+        close(dev)
+    end
+    FLI.foreach_device(walker, :usb, :camera)
+
+Thanks to the do-block syntax of Julia, it is possible to do the same thing
+more directly (without defining an auxiliary `walker` function):
+
+    FLI.foreach_device(:usb, :camera) do domain, filename, devname
+        dev = FLI.Device(filename, domain)
+        println("File: \"\$filename\", name: \"\$devname\", domain: \$domain")
+        FLI.print_camera_info(dev)
+        close(dev)
+    end
+
+"""
+function foreach_device(f::Function, args::Symbol...)
+    domains = UInt(0)
+    for arg in args
+        if arg === :parallel_port
+            domains |= UInt(Lib.FLIDOMAIN_PARALLEL_PORT)
+        elseif arg === :usb
+            domains |= UInt(Lib.FLIDOMAIN_USB)
+        elseif arg === :serial
+            domains |= UInt(Lib.FLIDOMAIN_SERIAL)
+        elseif arg === :inet
+            domains |= UInt(Lib.FLIDOMAIN_INET)
+        elseif arg === :serial_19200
+            domains |= UInt(Lib.FLIDOMAIN_SERIAL_19200)
+        elseif arg === :serial_1200
+            domains |= UInt(Lib.FLIDOMAIN_SERIAL_1200)
+        elseif arg === :camera
+            domains |= UInt(Lib.FLIDEVICE_CAMERA)
+        elseif arg === :filterwheel
+            domains |= UInt(Lib.FLIDEVICE_FILTERWHEEL)
+        elseif arg === :hs_filterwheel
+            domains |= UInt(Lib.FLIDEVICE_HS_FILTERWHEEL)
+        elseif arg === :raw
+            domains |= UInt(Lib.FLIDEVICE_RAW)
+        elseif arg === :enumerate_by_connection
+            domains |= UInt(Lib.FLIDEVICE_ENUMERATE_BY_CONNECTION)
+        elseif arg !== :none
+            error("unknown interface or device type `:$arg`")
+        end
+    end
+    @check FLICreateList(domains)
+    try
+        len = 260
+        domr = Ref{Lib.flidomain_t}()
+        buf1 = Array{UInt8}(undef, len)
+        buf2 = Array{UInt8}(undef, len)
+        status = Lib.FLIListFirst(domr, buf1, len, buf2, len)
+        while status.code == 0
+            domain = domr[]
+            filename = unsafe_string(pointer(buf1))
+            devname = unsafe_string(pointer(buf2))
+            f(domain, filename, devname)
+            status = Lib.FLIListNext(domr, buf1, len, buf2, len)
+        end
+    finally
+        @check FLIDeleteList()
+    end
+end
+
+"""
+    FLI.list_devices([io::stdout,] args::Symbol...)
+
+lists connected FLI devices whose interface and/or device type match `args...`.
+
+For example:
+
+    FLI.list_devices(:usb, :camera) # list connected USB cameras
+    FLI.list_devices(:serial)       # list devices connected to the serial port
+
+"""
+list_devices(args::Symbol...) = list_devices(stdout, args...)
+function list_devices(io::IO, args::Symbol...)
+    foreach_device(args...) do domain, filename, devname
+        println(io, "File: \"$filename\", name: \"$devname\", domain: $domain")
+        if (domain & Lib.FLIDEVICE_CAMERA) != 0
+            dev = Device(filename, domain)
+            FLI.print_camera_info(io, dev)
+            close(dev)
+        end
+    end
+end
+
 # FIXME: FLIReadIOPort(flidev_t dev, long *ioportset);
 # FIXME: FLIWriteIOPort(flidev_t dev, long ioportset);
 # FIXME: FLIConfigureIOPort(flidev_t dev, long ioportset);
-
-# FIXME: FLIList(flidomain_t domain, char ***names);
-# FIXME: FLIFreeList(char **names);
 
 # FIXME: FLIGetFilterName(flidev_t dev, long filter, char *name, size_t len);
 # FIXME: FLISetActiveWheel(flidev_t dev, long wheel);
@@ -615,11 +751,6 @@ parse_fan_speed(sym::Symbol) = (
 # FIXME: FLIGetStepperPosition(flidev_t dev, long *position);
 # FIXME: FLIGetStepsRemaining(flidev_t dev, long *steps);
 # FIXME: FLIHomeFocuser(flidev_t dev);
-
-# FIXME: FLICreateList(flidomain_t domain);
-# FIXME: FLIDeleteList(void);
-# FIXME: FLIListFirst(flidomain_t *domain, char *filename, size_t fnlen, char *name, size_t namelen);
-# FIXME: FLIListNext(flidomain_t *domain, char *filename, size_t fnlen, char *name, size_t namelen);
 
 # FIXME: FLIGetFocuserExtent(flidev_t dev, long *extent);
 # FIXME: FLIUsbBulkIO(flidev_t dev, int ep, void *buf, long *len);

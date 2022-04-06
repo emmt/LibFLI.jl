@@ -346,11 +346,13 @@ function FLIDeleteList()
 end
 
 function FLIListFirst(domain, filename, fnlen, name, namelen)
-    @ccall libfli.FLIListFirst(domain::Ptr{flidomain_t}, filename::Cstring, fnlen::Csize_t, name::Cstring, namelen::Csize_t)::Status
+    # FIXME: @ccall libfli.FLIListFirst(domain::Ptr{flidomain_t}, filename::Cstring, fnlen::Csize_t, name::Cstring, namelen::Csize_t)::Status
+    @ccall libfli.FLIListFirst(domain::Ptr{flidomain_t}, filename::Ptr{UInt8}, fnlen::Csize_t, name::Ptr{UInt8}, namelen::Csize_t)::Status
 end
 
 function FLIListNext(domain, filename, fnlen, name, namelen)
-    @ccall libfli.FLIListNext(domain::Ptr{flidomain_t}, filename::Cstring, fnlen::Csize_t, name::Cstring, namelen::Csize_t)::Status
+    # FIXME: @ccall libfli.FLIListNext(domain::Ptr{flidomain_t}, filename::Cstring, fnlen::Csize_t, name::Cstring, namelen::Csize_t)::Status
+    @ccall libfli.FLIListNext(domain::Ptr{flidomain_t}, filename::Ptr{UInt8}, fnlen::Csize_t, name::Ptr{UInt8}, namelen::Csize_t)::Status
 end
 
 function FLIReadTemperature(dev, channel, temperature)
