@@ -4,6 +4,28 @@ This package provides a Julia interface to [Finger Lakes Instrumentation
 (FLI)](https://www.flicamera.com/) devices, notably their cameras.
 
 
+## Usage
+
+```julia
+using LibFLI
+LibFLI.set_debug_level("", :all)    # set the debug level
+LibFLI.get_lib_version()            # get the library version
+cam = LibFLI.Device("/dev/usbfli0") # open 1st USB camera
+LibFLI.print_camera_info(cam)       # print may characteristics of camera
+```
+
+Method `close(cam)` can be called to eventually close the device associated to
+object `cam` but this is not mandatory as this is automatically done when the
+object is reclaimed by garbage collector.
+
+The API attempts to reflect that of the C library.  Constants are replaced by
+symbolic names.  For example:
+
+```julia
+LibFLI.set_fan_speed(cam, :on)  # to switch the fan on
+LibFLI.set_fan_speed(cam, :off) # to switch the fan off
+```
+
 ## Installation
 
 ### Installation of the FLI SDK
