@@ -1,0 +1,4 @@
+name = "LibFLI"
+uuid = "a16999c6-ab7b-40c5-bd6d-6208ffe5f8b1"
+authors = ["Éric Thiébaut <eric.thiebaut@univ-lyon1.fr>"]
+version = "0.1.0"
