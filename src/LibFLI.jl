@@ -6,31 +6,48 @@ include("libcalls.jl")
 const PixelType = Union{UInt8,UInt16}
 
 """
-    LibFLI.FLIException(code)
+    LibFLI.FLIException(func, code)
 
-yields a exception representing an error returned by a function of the LibFLI C
-library.
+yields a exception representing an error `code` returned by function `func` of
+the LibFLI C library.
 
 """
 struct FLIException <: Exception
+    func::Symbol
     code::Clong
-end
-
-"""
-    LibFLI.check(status)
-
-checks the status returned by a function of the LibFLI C library
-and throws a `FLIException` exception in case of error.
-
-"""
-function check(status::Lib.Status)
-    status.code < 0 && throw(FLIException(status.code))
-    nothing
 end
 
 function Base.showerror(io::IO, ex::FLIException)
     print(io, "FLIException(", ex.code, "): ",
-          Libc.strerror(-ex.code))
+          Libc.strerror(-ex.code), " in `", ex.func, "`")
+end
+
+"""
+    LibFLI.check(func, status)
+
+checks the status returned by function `func` of the LibFLI C library and
+throws a `FLIException` exception in case of error.
+
+"""
+function check(func::Symbol, status::Lib.Status)
+    status.code < 0 && throw(FLIException(func, status.code))
+    nothing
+end
+
+"""
+    LibFLI.@check FLIFunc(args...)
+
+calls the function `FLIFunc` of the LibFLI SDK and check its status.
+
+"""
+macro check(ex::Expr)
+    ex.head === :call || error("expecting a function call")
+    startswith(String(ex.args[1]), "FLI") || error(
+        "called function must be a function of the LibFLI SDK")
+    func = QuoteNode(ex.args[1])
+    return Expr(:call, :check, func,
+                Expr(:call, Expr(:(.), :Lib, func),
+                     map(esc, ex.args[2:end])...))
 end
 
 mutable struct Device
@@ -64,7 +81,7 @@ function Device(name::AbstractString,;
                 device::Symbol = :camera)
     domain = parse_interface_domain(interface)|parse_device_domain(device)
     dev = Ref{Lib.flidev_t}(Lib.FLI_INVALID_DEVICE)
-    check(Lib.FLIOpen(dev, name, domain))
+    @check FLIOpen(dev, name, domain)
     obj = Device()
     obj.dev = dev[]
     finalizer(_finalize, obj)
@@ -80,7 +97,7 @@ function Base.close(obj::Device; throwerrors::Bool = true)
         obj.dev = Lib.FLI_INVALID_DEVICE
         status = Lib.FLIClose(dev)
         if throwerrors && status.code < 0
-            throw(FLIException(status.code))
+            throw(FLIException(:FLIClose, status.code))
         end
     end
 end
@@ -105,9 +122,15 @@ parse_device_domain(sym::Symbol) = (
     sym === :enumerate_by_connection ? Lib.FLIDEVICE_ENUMERATE_BY_CONNECTION :
     error("unknown device type"))
 
+"""
+    LibFLI.get_lib_version() -> str
+
+yields the version of the FLI C library.
+
+"""
 function get_lib_version()
     buf = Array{UInt8}(undef, 256)
-    check(Lib.FLIGetLibVersion(buf, length(buf)))
+    @check FLIGetLibVersion(buf, length(buf))
     return unsafe_string(pointer(buf))
 end
 
@@ -132,7 +155,7 @@ more verbose debug messages.
 
 """
 set_debug_level(host::AbstractString, level::Symbol) =
-    check(Lib.FLISetDebugLevel(host, parse_debug_level(level)))
+    @check FLISetDebugLevel(host, parse_debug_level(level))
 
 parse_debug_level(sym::Symbol) = (
     sym === :none ? Lib.FLIDEBUG_NONE :
@@ -145,7 +168,7 @@ parse_debug_level(sym::Symbol) = (
 
 function get_model(obj::Device)
     buf = Array{UInt8}(undef, 256)
-    check(Lib.FLIGetModel(obj.dev, buf, length(buf)))
+    @check FLIGetModel(obj.dev, buf, length(buf))
     return unsafe_string(pointer(buf))
 end
 
@@ -158,19 +181,19 @@ yields the pixel size (in meters) of the camera `cam`.
 function get_pixel_size(cam::Device)
     xsiz = Ref{Cdouble}()
     xsiz = Ref{Cdouble}()
-    check(Lib.FLIGetPixelSize(cam.dev, xsiz, ysiz))
+    @check FLIGetPixelSize(cam.dev, xsiz, ysiz)
     return (xsiz[], ysiz[])
 end
 
 function get_hardware_revision(obj::Device)
     rev = Ref{Clong}()
-    check(Lib.FLIGetHWRevision(obj.dev, rev))
+    @check FLIGetHWRevision(obj.dev, rev)
     return rev[]
 end
 
 function get_firmware_revision(obj::Device)
     rev = Ref{Clong}()
-    check(Lib.FLIGetFWRevision(obj.dev, rev))
+    @check FLIGetFWRevision(obj.dev, rev)
     return rev[]
 end
 
@@ -187,7 +210,7 @@ function get_array_area(cam::Device)
     y0 = Ref{Clong}()
     x1 = Ref{Clong}()
     y1 = Ref{Clong}()
-    check(Lib.FLIGetArrayArea(cam.dev, x0, y0, x1, y1))
+    @check FLIGetArrayArea(cam.dev, x0, y0, x1, y1)
     return (x0[], y0[], x1[], y1[])
 end
 
@@ -207,7 +230,7 @@ function get_visible_area(cam::Device)
     y0 = Ref{Clong}()
     x1 = Ref{Clong}()
     y1 = Ref{Clong}()
-    check(Lib.FLIGetVisibleArea(cam.dev, x0, y0, x1, y1))
+    @check FLIGetVisibleArea(cam.dev, x0, y0, x1, y1)
     return (x0[], y0[], x1[], y1[])
 end
 
@@ -218,8 +241,8 @@ function get_readout_dimensions(cam::Device)
     height  = Ref{Clong}()
     voffset = Ref{Clong}()
     vbin    = Ref{Clong}()
-    check(Lib.FLIGetReadoutDimensions(
-        cam.dev, width, hoffset, hbin, height, voffset, vbin))
+    @check FLIGetReadoutDimensions(
+        cam.dev, width, hoffset, hbin, height, voffset, vbin)
     return (width[], hoffset[], hbin[], height[], voffset[], vbin[])
 end
 
@@ -246,7 +269,7 @@ The macro-pixels are `xbin×ybin` physical pixels each.
 function set_image_area(cam::Device,
                         x0::Integer, y0::Integer,
                         x1::Integer, y1::Integer)
-    check(Lib.FLISetImageArea(cam.dev, x0, y0, x1, y1))
+    @check FLISetImageArea(cam.dev, x0, y0, x1, y1)
 end
 
 """
@@ -257,8 +280,8 @@ acquirred by camera `cam`.
 
 """
 function set_binning(cam::Device, xbin::Integer, ybin::Integer)
-    check(Lib.FLISetHBin(cam.dev, xbin))
-    check(Lib.FLISetVBin(cam.dev, ybin))
+    @check FLISetHBin(cam.dev, xbin)
+    @check FLISetVBin(cam.dev, ybin)
 end
 
 """
@@ -268,8 +291,8 @@ sets the exposure time to be `secs` seconds for camera `cam`.
 
 """
 function set_exposure_time(cam::Device, secs::Real)
-    # Exposure time is in milliseconds in the Lib.
-    check(Lib.FLISetExposureTime(cam.dev, round(Clong, 1e3*secs)))
+    # Exposure time is in milliseconds in the C library.
+    @check FLISetExposureTime(cam.dev, round(Clong, 1e3*secs))
 end
 
 """
@@ -281,7 +304,7 @@ shutter remains closed, `:flood`, or `:rbi_flush`.
 
 """
 set_frame_type(cam::Device, sym::Symbol) =
-    check(Lib.FLISetFrameType(cam.dev, parse_frame_type(sym)))
+    @check FLISetFrameType(cam.dev, parse_frame_type(sym))
 
 parse_frame_type(sym::Symbol) = (
     sym === :normal    ? Lib.FLI_FRAME_TYPE_NORMAL :
@@ -290,7 +313,7 @@ parse_frame_type(sym::Symbol) = (
     sym === :rbi_flush ? Lib.FLI_FRAME_TYPE_RBI_FLUSH :
     error("unknown frame type"))
 
-cancel_exposure(cam::Device) = check(Lib.FLICancelExposure(cam.dev))
+cancel_exposure(cam::Device) = @check FLICancelExposure(cam.dev)
 
 """
     LibFLI.get_exposure_status(cam) -> secs
@@ -301,38 +324,38 @@ yields the number of seconds to wait for the end of the exposure by camera
 """
 function get_exposure_status(cam::Device)
     timeleft = Ref{Clong}()
-    check(Lib.FLIGetExposureStatus(cam.dev, timeleft))
+    @check FLIGetExposureStatus(cam.dev, timeleft)
     return timeleft[]/1e3
 end
 
 # Set temperature (in °C).
 set_temperature(obj::Device, temp::Real) =
-    check(Lib.FLISetTemperature(obj.dev, temp))
+    @check FLISetTemperature(obj.dev, temp)
 
 # Get temperature (in °C).
 function get_temperature(obj::Device)
     val = Ref{Cdouble}()
-    check(Lib.FLIGetTemperature(obj.dev, val))
+    @check FLIGetTemperature(obj.dev, val)
     return val[]
 end
 
 function read_temperature(obj::Device, channel::Symbol)
     temp = Ref{Cdouble}()
-    check(Lib.FLIReadTemperature(obj.dev, parse_temperature_channel(channel),
-                                 temp))
+    @check FLIReadTemperature(
+        obj.dev, parse_temperature_channel(channel), temp)
     return temp[]
 end
 
 parse_temperature_channel(sym::Symbol) = (
     sym === :internal ? Lib.FLI_TEMPERATURE_INTERNAL :
     sym === :external ? Lib.FLI_TEMPERATURE_EXTERNAL :
-    sym === :ccd ? Lib.FLI_TEMPERATURE_CCD :
-    sym === :base ? Lib.FLI_TEMPERATURE_BASE :
+    sym === :ccd      ? Lib.FLI_TEMPERATURE_CCD :
+    sym === :base     ? Lib.FLI_TEMPERATURE_BASE :
     error("unknown temerature channel"))
 
 function get_cooler_power(obj::Device)
     val = Ref{Cdouble}()
-    check(Lib.FLIGetCoolerPower(obj.dev, val))
+    @check FLIGetCoolerPower(obj.dev, val)
     return val[]
 end
 
@@ -380,7 +403,7 @@ function unsafe_grab_frame!(cam::Device, img::Matrix{<:PixelType})
     stride = width*sizeof(eltype(img))
     ptr = pointer(img)
     for row in 1:height
-        check(Lib.FLIGrabRow(cam.dev, ptr + (row - 1)*stride, width))
+        @check FLIGrabRow(cam.dev, ptr + (row - 1)*stride, width)
     end
     return img
 end
@@ -399,11 +422,11 @@ function unsafe_grab_row!(cam::Device, img::Matrix{<:PixelType}, row::Integer)
     1 ≤ row ≤ height || error("out of range row index")
     stride = width*sizeof(eltype(img))
     ptr = pointer(img) + (row - 1)*stride
-    check(Lib.FLIGrabRow(cam.dev, ptr, width))
+    @check FLIGrabRow(cam.dev, ptr, width)
 end
 
-stop_video_mode(cam::Device) = check(Lib.FLIStopVideoMode(cam.dev))
-start_video_mode(cam::Device) = check(Lib.FLIStartVideoMode(cam.dev))
+stop_video_mode(cam::Device) = @check FLIStopVideoMode(cam.dev)
+start_video_mode(cam::Device) = @check FLIStartVideoMode(cam.dev)
 
 """
     LibFLI.grab_video_frame([T = UInt16,] cam) -> img
@@ -428,17 +451,17 @@ The method is *unsafe* because it assumes that its arguments are correct.
 
 """
 function unsafe_grab_video_frame!(cam::Device, img::Matrix{<:PixelType})
-    check(FLIGrabVideoFrame(cam.dev, img, sizeof(img)))
+    @check FLIGrabVideoFrame(cam.dev, img, sizeof(img))
     return img
 end
 
-expose_frame(cam::Device) = check(Lib.FLIExposeFrame(cam.dev))
+expose_frame(cam::Device) = @check FLIExposeFrame(cam.dev)
 
 flush_row(cam::Device, rows::Integer, repeat::Integer) =
-    check(Lib.FLIFlushRow(cam.dev, rows, repeat))
+    @check FLIFlushRow(cam.dev, rows, repeat)
 
 set_nflushes(cam::Device, nflushes::Integer) =
-    check(Lib.FLISetNFlushes(cam.dev, nflushes))
+    @check FLISetNFlushes(cam.dev, nflushes)
 
 """
     LibFLI.set_bit_depth(cam, T)
@@ -451,11 +474,11 @@ sets the bit depth for camera `cam` for pixels of type `T` (either `UInt8` or
 for (T, bitdepth) in ((UInt8, Lib.FLI_MODE_8BIT),
                       (UInt16, Lib.FLI_MODE_16BIT))
     @eval set_bit_depth(cam::Device, ::Type{$T}) =
-        check(Lib.FLISetBitDepth(cam.dev, $bitdepth))
+        @check FLISetBitDepth(cam.dev, $bitdepth)
 end
 
-Base.lock(obj::Device) = check(Lib.FLILockDevice(obj.dev))
-Base.unlock(obj::Device) = check(Lib.FLIUnLockDevice(obj.dev))
+Base.lock(obj::Device) = @check FLILockDevice(obj.dev)
+Base.unlock(obj::Device) = @check FLIUnLockDevice(obj.dev)
 
 """
     LibFLI.control_shutter(cam, ctrl)
@@ -466,7 +489,7 @@ controls the shutter of camera `cam`, argument `ctrl` can be one of `:close`,
 
 """
 control_shutter(cam::Device, ctrl::Symbol) =
-    check(Lib.FLIControlShutter(cam.dev, parse_shutter(ctrl)))
+    @check FLIControlShutter(cam.dev, parse_shutter(ctrl))
 
 parse_shutter(sym::Symbol) = (
     sym === :close ? Lib.FLI_SHUTTER_CLOSE :
@@ -478,7 +501,7 @@ parse_shutter(sym::Symbol) = (
     error("unknown shutter control"))
 
 control_background_flush(cam::Device, ctrl::Symbol) =
-    check(Lib.FLIControlBackgroundFlush(cam.dev, parse_background_flush(ctrl)))
+    @check FLIControlBackgroundFlush(cam.dev, parse_background_flush(ctrl))
 
 parse_background_flush(sym::Symbol) = (
     sym === :stop ? FLI_BGFLUSH_STOP :
@@ -486,45 +509,45 @@ parse_background_flush(sym::Symbol) = (
     error("unknown background flush control"))
 
 set_dac(obj::Device, dacset::Integer) =
-    check(Lib.FLISetDAC(obj.dev, dacset))
+    @check FLISetDAC(obj.dev, dacset)
 
 function get_device_status(obj::Device)
     mode = Ref{Lib.flimode_t}()
-    check(Lib.FLIGetDeviceStatus(obj.dev, mode))
+    @check FLIGetDeviceStatus(obj.dev, mode)
     return mode[]
 end
 
 function get_camera_mode_string(cam::Device, mode::Integer)
     buf = Array{UInt8}(undef, 256)
-    check(Lib.FLIGetCameraModeString(cam.dev, mode, buf, length(buf)))
+    @check FLIGetCameraModeString(cam.dev, mode, buf, length(buf))
     return unsafe_string(pointer(buf))
 end
 
 function get_camera_mode(cam::Device)
     mode = Ref{Lib.flimode_t}()
-    check(Lib.FLIGetCameraMode(cam.dev, mode))
+    @check FLIGetCameraMode(cam.dev, mode)
     return mode[]
 end
 
 get_camera_mode(cam::Device, mode::Integer) =
-    check(Lib.FLISetCameraMode(cam.dev, mode))
+    @check FLISetCameraMode(cam.dev, mode)
 
 set_tdi(obj::Device, rate::Integer, flags::Integer) =
-    check(Lib.FLISetTDI(obj.dev, rate, flags))
+    @check FLISetTDI(obj.dev, rate, flags)
 
-home_device(obj::Device) = check(Lib.FLIHomeDevice(obj.dev))
+home_device(obj::Device) = @check FLIHomeDevice(obj.dev)
 
 function get_serial_string(obj::Device)
     buf = Array{UInt8}(undef, 256)
-    check(Lib.FLIGetSerialString(obj.dev, buf, length(buf)))
+    @check FLIGetSerialString(obj.dev, buf, length(buf))
     return unsafe_string(pointer(buf))
 end
 
-end_exposure(cam::Device) = check(Lib.FLIEndExposure(cam.dev))
-trigger_exposure(cam::Device) = check(Lib.FLITriggerExposure(cam.dev))
+end_exposure(cam::Device) = @check FLIEndExposure(cam.dev)
+trigger_exposure(cam::Device) = @check FLITriggerExposure(cam.dev)
 
 set_fan_speed(cam::Device, fanspeed) =
-    check(Lib.FLISetFanSpeed(cam.dev, fanspeed))
+    @check FLISetFanSpeed(cam.dev, fanspeed)
 
 # FIXME: FLIReadIOPort(flidev_t dev, long *ioportset);
 # FIXME: FLIWriteIOPort(flidev_t dev, long ioportset);
