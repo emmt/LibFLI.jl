@@ -55,8 +55,9 @@ macro check(ex::Expr)
 end
 
 mutable struct Device
-    dev::Lib.flidev_t
-    Device() = new(Lib.FLI_INVALID_DEVICE)
+    dev::Lib.flidev_t  # device handle
+    buf::Vector{UInt8} # buffer to avoid segmentation fault
+    Device() = new(Lib.FLI_INVALID_DEVICE, UInt8[])
 end
 
 """
@@ -434,7 +435,7 @@ end
 
 downloads the frame from camera `cam`.  Optional argument `T` is to specify the
 pixel type (either `UInt8` or `UInt16`).  Specifying the wrong pixel type may
-cause a segmentation fault.
+result in unexpected pixel values.
 
 """
 grab_frame(cam::Device) = grab_frame(UInt16, cam)
@@ -448,7 +449,8 @@ end
 
 downloads the frame from camera `cam` to the image `img` and returns the image.
 The element type of the image (either `UInt8` or `UInt16`) must match the pixel
-type of the camera.  Using the wrong pixel type may cause a segmentation fault.
+type of the camera.  Using the wrong pixel type may result in unexpected pixel
+values.
 
 """
 function grab_frame!(cam::Device, img::Matrix{<:PixelType})
@@ -463,17 +465,40 @@ end
 
 downloads the frame from camera `cam` to image `img` and returns the image.
 
-The method is *unsafe* because it assumes that its arguments are correct.
+The method is *unsafe* because it assumes that the size of the destination
+image is correct.
 
-"""
-function unsafe_grab_frame!(cam::Device, img::Matrix{<:PixelType})
-    # NOTE: We do not use the function `FLIGrabFrame` because it does nothing
-    #       but throwing an error.
+""" unsafe_grab_frame!
+
+# NOTE: We do not use the function `FLIGrabFrame` because it does nothing but
+#       throwing an error.  So we use `FLIGrabRow` to download the image row by
+#       row.
+
+function unsafe_grab_frame!(cam::Device, img::Matrix{UInt8})
+    # Use internal row buffer large enough to avoid segmentation fault.
+    width, height = size(img)
+    nbytes = width*sizeof(UInt16)
+    buf = cam.buf
+    length(buf) ≥ nbytes || resize!(buf, nbytes)
+    ptr = pointer(buf)
+    for j in 1:height
+        # Download row of pixels into the buffer and then copy the row into the
+        # destination image.
+        @check FLIGrabRow(cam.dev, ptr, width)
+        @inbounds @simd for i in 1:width
+            img[i,j] = buf[i]
+        end
+    end
+    return img
+end
+
+function unsafe_grab_frame!(cam::Device, img::Matrix{UInt16})
+    # Download pixels row by row directly into the destination image.
     width, height = size(img)
     stride = width*sizeof(eltype(img))
     ptr = pointer(img)
-    for row in 1:height
-        @check FLIGrabRow(cam.dev, ptr + (row - 1)*stride, width)
+    for j in 1:height
+        @check FLIGrabRow(cam.dev, ptr + (j - 1)*stride, width)
     end
     return img
 end
