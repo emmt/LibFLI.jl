@@ -575,6 +575,16 @@ end
 Base.lock(obj::Device) = @check FLILockDevice(obj.dev)
 Base.unlock(obj::Device) = @check FLIUnLockDevice(obj.dev)
 
+# This is for the do-block syntax.
+function Base.lock(f::Function, obj::Device)
+    lock(obj)
+    try
+        return f()
+    finally
+        unlock(obj)
+    end
+end
+
 """
     FLI.control_shutter(cam, ctrl)
 
