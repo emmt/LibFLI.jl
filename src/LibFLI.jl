@@ -540,6 +540,94 @@ function get_cooler_power(cam::Device)
 end
 
 """
+    FLI.configure_camera(cam; key=val, ...)
+
+configures camera `cam` with settings specified by any of the following
+keywords:
+
+- `temperature` to specify the target temperature (in °C);
+
+- `exposuretime` to specify the exposure time (in seconds);
+
+- `width` to specify the width of the image area (in macro-pixels);
+
+- `height` to specify the height of the image area (in macro-pixels);
+
+- `xoff` to specify the horizontal offset of the image area (in pixels);
+
+- `yoff` to specify the vertical offset of the image area (in pixels);
+
+- `xbin` to specify the horizontal binning factor (in pixels);
+
+- `ybin` to specify the vertical binning factor (in pixels);
+
+- `frametype` to specify the frame type;
+
+- `nflushes` to specify the number of background flushes;
+
+- `bgflush` to specify whether to start or stop background flushing;
+
+- `pixeltype` to specify the pixel type;
+
+- `fanspeed` to specify whether to switch on or off the fan;
+
+- `shutter` to control the shutter;
+
+"""
+function configure_camera(cam::Device;
+                          temperature::Union{Nothing,Real} = nothing,
+                          exposuretime::Union{Nothing,Real} = nothing,
+                          width::Union{Nothing,Integer} = nothing,
+                          height::Union{Nothing,Integer} = nothing,
+                          xoff::Union{Nothing,Integer} = nothing,
+                          yoff::Union{Nothing,Integer} = nothing,
+                          xbin::Union{Nothing,Integer} = nothing,
+                          ybin::Union{Nothing,Integer} = nothing,
+                          frametype::Union{Nothing,Symbol,Integer} = nothing,
+                          nflushes::Union{Nothing,Integer} = nothing,
+                          bgflush::Union{Nothing,Symbol,Integer} = nothing,
+                          pixeltype = nothing,
+                          fanspeed = nothing,
+                          shutter = nothing)
+    # Auxiliary function to get a possibly new option value preserving the
+    # type.
+    getopt(newval, oldval) =
+        (newval === nothing ? oldval : oftype(oldval, newval))
+
+    temperature === nothing || set_temperature(cam, temperature)
+    exposuretime === nothing || set_exposure_time(cam, exposuretime)
+    if (width !== nothing || height !== nothing || xoff !== nothing ||
+        yoff !== nothing || xbin !== nothing || ybin !== nothing)
+        # Some ROI parameters have been specified.
+        cur_width, cur_xoff, cur_xbin, cur_height, cur_yoff, cur_ybin =
+            get_readout_dimensions(cam)
+        new_width  = getopt(width,  cur_width)
+        new_height = getopt(height, cur_height)
+        new_xoff   = getopt(xoff,   cur_xoff)
+        new_yoff   = getopt(yoff,   cur_yoff)
+        new_xbin   = getopt(xbin,   cur_xbin)
+        new_ybin   = getopt(ybin,   cur_ybin)
+        new_xbin != cur_xbin && @check FLISetHBin(cam.dev, new_xbin)
+        new_ybin != cur_ybin && @check FLISetVBin(cam.dev, new_ybin)
+        if (new_width != cur_width || new_height != cur_height ||
+            new_xoff != cur_xoff ||  new_yoff != cur_yoff)
+            x0 = new_xoff
+            y0 = new_yoff
+            x1 = x0 + new_width
+            y1 = y0 + new_height
+            set_image_area(cam, x0, y0, x1, y1)
+        end
+    end
+    frametype === nothing || set_frame_type(cam, frametype)
+    nflushes === nothing || set_nflushes(cam, nflushes)
+    bgflush === nothing || control_background_flush(cam, bgflush)
+    pixeltype === nothing || set_bit_depth(cam, pixeltype)
+    fanspeed === nothing || set_fan_speed(cam, fanspeed)
+    shutter === nothing || control_shutter(cam, shutter)
+    nothing
+end
+
+"""
     FLI.grab_frame([T=UInt16,] cam) -> img
 
 downloads the frame from camera `cam`.  Optional argument `T` is to specify the

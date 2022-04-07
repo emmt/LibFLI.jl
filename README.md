@@ -26,6 +26,67 @@ for `LibFLI`.  This simplifies the writing of code as it allows you to write
 want this feature, call `import LibFLI` instead.
 
 
+### Camera configuration
+
+Camera settings can be tuned individually via the functions of the SDK.  For
+instance, to configure the camera `cam`, the following functions are available:
+
+```julia
+FLI.set_temperature(cam, degs) # to set the temperature in °C
+FLI.set_exposure_time(cam, secs) # to set the exposure time in seconds
+FLI.set_binning(cam, xbin, ybin) # to set the binning factors (in pixels)
+FLI.set_image_area(cam, x0, y0, x1, y1) # to set the image area
+FLI.set_frame_type(cam, frametype) # to set the frame type
+FLI.set_nflushes(cam, nflushes) # to set the number of background flushes
+FLI.control_background_flush(cam, bgflush) # to start/stop background flushing
+FLI.set_bit_depth(cam, pixeltype) # to set the pixel type
+FLI.set_fan_speed(cam, fanspeed) # to switch on/off the fan
+FLI.control_shutter(cam, shutter) # to control the shutter
+```
+
+But calling these functions may be tedious, plus some functions (e.g.,
+`FLI.set_image_area`) have weird parameters not directly understandable.  To
+solve for these issues, a higher level interface is provided by:
+
+```julia
+FLI.configure_camera(cam; key=val, ...)
+```
+
+which takes the settings as any of the following keywords:
+
+- `temperature` to specify the target temperature (in °C);
+
+- `exposuretime` to specify the exposure time (in seconds);
+
+- `width` to specify the width of the image area (in macro-pixels);
+
+- `height` to specify the height of the image area (in macro-pixels);
+
+- `xoff` to specify the horizontal offset of the image area (in pixels);
+
+- `yoff` to specify the vertical offset of the image area (in pixels);
+
+- `xbin` to specify the horizontal binning factor (in pixels);
+
+- `ybin` to specify the vertical binning factor (in pixels);
+
+- `frametype` to specify the frame type (value can be `:normal` for a normal
+  frame where the shutter opens, `:dark` for a dark frame where the shutter
+  remains closed, `:flood`, or `:rbi_flush`);
+
+- `nflushes` to specify the number of background flushes;
+
+- `bgflush` to control background flushing (value can be `:start` or `:stop`);
+
+- `pixeltype` to specify the pixel type (value can be `UInt8` or `UInt16`);
+
+- `fanspeed` to control the fan speed (value can be `:on` or `:off`);
+
+- `shutter` to control the shutter (value can be `:close`, `:open`,
+  `:external_trigger`, `:external_trigger_low`, `:external_trigger_high`, or
+  `:external_exposure_control`);
+
+
 ### Naming conventions
 
 The API attempts to reflect that of the C library.  For readability, function
