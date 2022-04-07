@@ -29,21 +29,21 @@ are [`FLIDEVICE_CAMERA`](@ref), {FLIDOMAIN\\_FILTERWHEEL}, and
 """
 const flidomain_t = Clong
 
-const FLIDOMAIN_NONE                    = flidomain_t(0x00)
-const FLIDOMAIN_PARALLEL_PORT           = flidomain_t(0x01)
-const FLIDOMAIN_USB                     = flidomain_t(0x02)
-const FLIDOMAIN_SERIAL                  = flidomain_t(0x03)
-const FLIDOMAIN_INET                    = flidomain_t(0x04)
-const FLIDOMAIN_SERIAL_19200            = flidomain_t(0x05)
-const FLIDOMAIN_SERIAL_1200             = flidomain_t(0x06)
+const FLIDOMAIN_NONE                    = 0x0000
+const FLIDOMAIN_PARALLEL_PORT           = 0x0001
+const FLIDOMAIN_USB                     = 0x0002
+const FLIDOMAIN_SERIAL                  = 0x0003
+const FLIDOMAIN_INET                    = 0x0004
+const FLIDOMAIN_SERIAL_19200            = 0x0005
+const FLIDOMAIN_SERIAL_1200             = 0x0006
 
-const FLIDEVICE_NONE                    = flidomain_t(0x0000)
-const FLIDEVICE_CAMERA                  = flidomain_t(0x0100)
-const FLIDEVICE_FILTERWHEEL             = flidomain_t(0x0200)
-const FLIDEVICE_FOCUSER                 = flidomain_t(0x0300)
-const FLIDEVICE_HS_FILTERWHEEL          = flidomain_t(0x0400)
-const FLIDEVICE_RAW                     = flidomain_t(0x0f00)
-const FLIDEVICE_ENUMERATE_BY_CONNECTION = flidomain_t(0x8000)
+const FLIDEVICE_NONE                    = 0x0000
+const FLIDEVICE_CAMERA                  = 0x0100
+const FLIDEVICE_FILTERWHEEL             = 0x0200
+const FLIDEVICE_FOCUSER                 = 0x0300
+const FLIDEVICE_HS_FILTERWHEEL          = 0x0400
+const FLIDEVICE_RAW                     = 0x0f00
+const FLIDEVICE_ENUMERATE_BY_CONNECTION = 0x8000
 
 """
 
