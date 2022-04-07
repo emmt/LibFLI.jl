@@ -303,7 +303,7 @@ yields the pixel size (in meters) of the camera `cam`.
 """
 function get_pixel_size(cam::Device)
     xsiz = Ref{Cdouble}()
-    xsiz = Ref{Cdouble}()
+    ysiz = Ref{Cdouble}()
     @check FLIGetPixelSize(cam.dev, xsiz, ysiz)
     return (xsiz[], ysiz[])
 end

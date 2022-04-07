@@ -18,7 +18,7 @@ FLI.print_camera_info(cam)       # print characteristics of camera
 
 Method `close(cam)` can be called to eventually close the device associated to
 object `cam` but this is not mandatory as this is automatically done when the
-object is reclaimed by garbage collector.
+object is reclaimed by the garbage collector.
 
 As you may have noticed, `using LibFLI` exports symbol `FLI` which is an alias
 for `LibFLI`.  This simplifies the writing of code as it allows you to write
