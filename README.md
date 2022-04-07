@@ -12,7 +12,7 @@ This package provides a Julia interface to [Finger Lakes Instrumentation
 using LibFLI
 FLI.set_debug_level("", :all)    # set the debug level
 FLI.get_lib_version()            # get the library version
-cam = FLI.Device("/dev/usbfli0", :usb, :camera) # open 1st USB camera
+cam = FLI.Device("/dev/fliusb0", :usb, :camera) # open 1st USB camera
 FLI.print_camera_info(cam)       # print characteristics of camera
 ```
 
