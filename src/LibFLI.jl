@@ -61,16 +61,20 @@ mutable struct Device
 end
 
 """
-    FLI.Device(name; interface = :usb, device = :camera) -> obj
+    FLI.Device(name, args...) -> obj
 
-opens FLI device `name`.  Keywords `interface` and `device` are to specifiy the
-interface and the type of device as symbolic names.  The possibilities are:
+opens FLI device `name` for the interface and device type specified in
+subsequent arguments which can be:
 
-- For `interface`: `:none`, `:parallel_port`, `:usb`, `:serial`, `:inet`,
-  `:serial_19200`, or `:serial_1200`.
+- Symbolic names (or a tuple of symbolic names) specifying an interface
+  (`:none`, `:parallel_port`, `:usb`, `:serial`, `:inet`, `:serial_19200`, or
+  `:serial_1200`) and a device type (`:none`, `:camera`, `:filterwheel`,
+  `:focuser`, `:hs_filterwheel`, `:raw`, or `:enumerate_by_interface`).
 
-- For `device`: `:none`, `:camera`, `:filterwheel`, `:focuser`,
-  `:hs_filterwheel`, `:raw`, or `:enumerate_by_interface`.
+- An integer consisting in a bitwise combination of an interface and a device
+  type.
+
+By default, the device is assumed to be an USB connected camera.
 
 Method `close(obj)` can be called to eventually close the device but this is
 not mandatory as the returned object is automatically closed when it is
@@ -78,23 +82,17 @@ reclaimed by garbage collector.
 
 Examples:
 
-    cam = FLI.Device("/dev/fliusb0"; device = :camera, interface = :usb)
+    dev = FLI.Device("/dev/fliusb0", :serial, :focuser)
+    cam = FLI.Device("/dev/fliusb0", :usb, :camera)
 
-----
-
-    FLI.Device(name, domain) -> obj
-
-opens FLI device `name` in `domain`.  This syntax is useful for the
-[`FLI.foreach_device`](@ref) method.
+See also [`FLI.foreach_device`](@ref) and [`FLI.list_devices`](@ref) for
+listing available devices.
 
 """
-function Device(name::AbstractString;
-                interface::Symbol = :usb,
-                device::Symbol = :camera)
-    domain = parse_interface_domain(interface)|parse_device_domain(device)
-    return Device(name, domain)
-end
-
+Device(name::AbstractString) = Device(name, :usb, :camera)
+Device(name::AbstractString, syms::Symbol...) =  Device(name, syms)
+Device(name::AbstractString, syms::Tuple{Vararg{Symbol}}) =
+    Device(name, encode_domain(syms))
 function Device(name::AbstractString, domain::Integer)
     dev = Ref{Lib.flidev_t}(Lib.FLI_INVALID_DEVICE)
     @check FLIOpen(dev, name, domain)
@@ -118,7 +116,14 @@ function Base.close(obj::Device; throwerrors::Bool = true)
     end
 end
 
-parse_interface_domain(sym::Symbol) = (
+"""
+    FLI.encode_interface_domain(sym) -> bits
+
+yields the unsigned integer corresponding to the symbolic name `sym` of an
+interface.
+
+"""
+encode_interface_domain(sym::Symbol) = (
     sym === :none          ? Lib.FLIDOMAIN_NONE :
     sym === :parallel_port ? Lib.FLIDOMAIN_PARALLEL_PORT :
     sym === :usb           ? Lib.FLIDOMAIN_USB :
@@ -126,9 +131,35 @@ parse_interface_domain(sym::Symbol) = (
     sym === :inet          ? Lib.FLIDOMAIN_INET :
     sym === :serial_19200  ? Lib.FLIDOMAIN_SERIAL_19200 :
     sym === :serial_1200   ? Lib.FLIDOMAIN_SERIAL_1200 :
-    error("unknown interface"))
+    error("unknown interface `:", sym, "`"))
 
-parse_device_domain(sym::Symbol) = (
+"""
+    FLI.decode_interface_domain(domain) -> sym
+
+yields the symbolic name of the interface indicated in `domain`.
+
+"""
+function decode_interface_domain(domain::Integer)
+    bits = (domain & 0x00ff) % UInt16
+    return (
+        bits == Lib.FLIDOMAIN_NONE          ? :none :
+        bits == Lib.FLIDOMAIN_PARALLEL_PORT ? :parallel_port :
+        bits == Lib.FLIDOMAIN_USB           ? :usb :
+        bits == Lib.FLIDOMAIN_SERIAL        ? :serial :
+        bits == Lib.FLIDOMAIN_INET          ? :inet :
+        bits == Lib.FLIDOMAIN_SERIAL_19200  ? :serial_19200 :
+        bits == Lib.FLIDOMAIN_SERIAL_1200   ? :serial_1200 :
+        error("invalid interface bits ", bits))
+end
+
+"""
+    FLI.encode_device_domain(sym) -> bits
+
+yields the unsigned integer corresponding to the symbolic name `sym` of a
+device type.
+
+"""
+encode_device_domain(sym::Symbol) = (
     sym === :none                    ? Lib.FLIDEVICE_NONE :
     sym === :camera                  ? Lib.FLIDEVICE_CAMERA :
     sym === :filterwheel             ? Lib.FLIDEVICE_FILTERWHEEL :
@@ -136,7 +167,85 @@ parse_device_domain(sym::Symbol) = (
     sym === :hs_filterwheel          ? Lib.FLIDEVICE_HS_FILTERWHEEL :
     sym === :raw                     ? Lib.FLIDEVICE_RAW :
     sym === :enumerate_by_connection ? Lib.FLIDEVICE_ENUMERATE_BY_CONNECTION :
-    error("unknown device type"))
+    error("unknown device type `:", sym, "`"))
+
+"""
+    FLI.decode_device_domain(domain) -> sym
+
+yields the symbolic name of the device type indicated in `domain`.
+
+"""
+function decode_device_domain(domain::Integer)
+    bits = (domain & 0xff00) % UInt16
+    return (
+        bits == Lib.FLIDEVICE_NONE                    ? :none :
+        bits == Lib.FLIDEVICE_CAMERA                  ? :camera :
+        bits == Lib.FLIDEVICE_FILTERWHEEL             ? :filterwheel :
+        bits == Lib.FLIDEVICE_FOCUSER                 ? :focuser :
+        bits == Lib.FLIDEVICE_HS_FILTERWHEEL          ? :hs_filterwheel :
+        bits == Lib.FLIDEVICE_RAW                     ? :raw :
+        bits == Lib.FLIDEVICE_ENUMERATE_BY_CONNECTION ? :enumerate_by_connection :
+        error("invalid device type bits ", bits))
+end
+
+Lib.FLIDOMAIN_NONE == 0 || throw(AssertionError("Lib.FLIDOMAIN_NONE != 0"))
+Lib.FLIDEVICE_NONE == 0 || throw(AssertionError("Lib.FLIDEVICE_NONE != 0"))
+
+"""
+    FLI.encode_domain(sym) -> bits
+
+yields the unsigned integer corresponding to the symbolic name `sym` of an
+interface or of a device type.
+
+Argument(s) can also be 0, 1 or 2 symbols (or a tuple of 0, 1 or 2 symbols)
+specifying the interface and device type to yield a bitwise combination of
+interface and device type.
+
+"""
+encode_domain(sym::Symbol) = (
+    sym === :none                    ? Lib.FLIDOMAIN_NONE :
+    sym === :parallel_port           ? Lib.FLIDOMAIN_PARALLEL_PORT :
+    sym === :usb                     ? Lib.FLIDOMAIN_USB :
+    sym === :serial                  ? Lib.FLIDOMAIN_SERIAL :
+    sym === :inet                    ? Lib.FLIDOMAIN_INET :
+    sym === :serial_19200            ? Lib.FLIDOMAIN_SERIAL_19200 :
+    sym === :serial_1200             ? Lib.FLIDOMAIN_SERIAL_1200 :
+    sym === :camera                  ? Lib.FLIDEVICE_CAMERA :
+    sym === :filterwheel             ? Lib.FLIDEVICE_FILTERWHEEL :
+    sym === :focuser                 ? Lib.FLIDEVICE_FOCUSER :
+    sym === :hs_filterwheel          ? Lib.FLIDEVICE_HS_FILTERWHEEL :
+    sym === :raw                     ? Lib.FLIDEVICE_RAW :
+    sym === :enumerate_by_connection ? Lib.FLIDEVICE_ENUMERATE_BY_CONNECTION :
+    error("unknown interface or device type `:", sym, "`"))
+
+function encode_domain(sym1::Symbol, sym2::Symbol)
+    bits = (encode_domain(sym1) % UInt16)
+    if (bits & 0x00ff) != 0
+        # Fist argument was interface.
+        bits |= (encode_device_domain(sym2) % UInt16)
+    elseif (bits & 0xff00) != 0
+        # Fist argument was device type.
+        bits |= (encode_interface_domain(sym2) % UInt16)
+    else
+        bits |= (encode_domain(sym2) % UInt16)
+    end
+    return bits
+end
+
+encode_domain() = zero(UInt16)
+
+encode_domain(sym::Union{Tuple{},Tuple{Symbol},Tuple{Symbol,Symbol}}) =
+    encode_domain(sym...)
+
+"""
+    FLI.decode_domain(bits) -> (int, dev)
+
+decodes the interface and device type indicated in `bits`.  The result is a
+2-tuple of symbols: `int` is the interface and `dev` is the device type.
+
+"""
+decode_domain(bits::Integer) = (decode_interface_domain(bits),
+                                decode_device_domain(bits))
 
 """
     FLI.get_lib_version() -> str
@@ -171,9 +280,9 @@ more verbose debug messages.
 
 """
 set_debug_level(host::AbstractString, level::Symbol) =
-    @check FLISetDebugLevel(host, parse_debug_level(level))
+    @check FLISetDebugLevel(host, encode_debug_level(level))
 
-parse_debug_level(sym::Symbol) = (
+encode_debug_level(sym::Symbol) = (
     sym === :none ? Lib.FLIDEBUG_NONE :
     sym === :fail ? Lib.FLIDEBUG_FAIL :
     sym === :warn ? Lib.FLIDEBUG_WARN :
@@ -351,9 +460,9 @@ shutter remains closed, `:flood`, or `:rbi_flush`.
 
 """
 set_frame_type(cam::Device, sym::Symbol) =
-    @check FLISetFrameType(cam.dev, parse_frame_type(sym))
+    @check FLISetFrameType(cam.dev, encode_frame_type(sym))
 
-parse_frame_type(sym::Symbol) = (
+encode_frame_type(sym::Symbol) = (
     sym === :normal    ? Lib.FLI_FRAME_TYPE_NORMAL :
     sym === :dark      ? Lib.FLI_FRAME_TYPE_DARK :
     sym === :flood     ? Lib.FLI_FRAME_TYPE_FLOOD :
@@ -407,11 +516,11 @@ Argument `chn` is one of `:internal`, `:external`, `:ccd`, or `:base`.
 function read_temperature(obj::Device, channel::Symbol)
     temp = Ref{Cdouble}()
     @check FLIReadTemperature(
-        obj.dev, parse_temperature_channel(channel), temp)
+        obj.dev, encode_temperature_channel(channel), temp)
     return temp[]
 end
 
-parse_temperature_channel(sym::Symbol) = (
+encode_temperature_channel(sym::Symbol) = (
     sym === :internal ? Lib.FLI_TEMPERATURE_INTERNAL :
     sym === :external ? Lib.FLI_TEMPERATURE_EXTERNAL :
     sym === :ccd      ? Lib.FLI_TEMPERATURE_CCD :
@@ -594,9 +703,9 @@ controls the shutter of camera `cam`, argument `ctrl` can be one of `:close`,
 
 """
 control_shutter(cam::Device, ctrl::Symbol) =
-    @check FLIControlShutter(cam.dev, parse_shutter(ctrl))
+    @check FLIControlShutter(cam.dev, encode_shutter(ctrl))
 
-parse_shutter(sym::Symbol) = (
+encode_shutter(sym::Symbol) = (
     sym === :close ? Lib.FLI_SHUTTER_CLOSE :
     sym === :open ? Lib.FLI_SHUTTER_OPEN :
     sym === :external_trigger ? Lib.FLI_SHUTTER_EXTERNAL_TRIGGER :
@@ -606,9 +715,9 @@ parse_shutter(sym::Symbol) = (
     error("unknown shutter control"))
 
 control_background_flush(cam::Device, ctrl::Symbol) =
-    @check FLIControlBackgroundFlush(cam.dev, parse_background_flush(ctrl))
+    @check FLIControlBackgroundFlush(cam.dev, encode_background_flush(ctrl))
 
-parse_background_flush(sym::Symbol) = (
+encode_background_flush(sym::Symbol) = (
     sym === :stop ? FLI_BGFLUSH_STOP :
     sym === :start ? FLI_BGFLUSH_START :
     error("unknown background flush control"))
@@ -658,9 +767,9 @@ sets the fan speed of camera `cam`, argument `onoff` is `:on` or `:off`.
 
 """
 set_fan_speed(cam::Device, onoff::Symbol) =
-    @check FLISetFanSpeed(cam.dev, parse_fan_speed(onoff))
+    @check FLISetFanSpeed(cam.dev, encode_fan_speed(onoff))
 
-parse_fan_speed(sym::Symbol) = (
+encode_fan_speed(sym::Symbol) = (
     sym === :off ? Lib.FLI_FAN_SPEED_OFF :
     sym === :on  ? Lib.FLI_FAN_SPEED_ON :
     error("unknown fan speed"))
@@ -700,35 +809,8 @@ more directly (without defining an auxiliary `walker` function):
 
 """
 function foreach_device(f::Function, args::Symbol...)
-    domains = UInt(0)
-    for arg in args
-        if arg === :parallel_port
-            domains |= UInt(Lib.FLIDOMAIN_PARALLEL_PORT)
-        elseif arg === :usb
-            domains |= UInt(Lib.FLIDOMAIN_USB)
-        elseif arg === :serial
-            domains |= UInt(Lib.FLIDOMAIN_SERIAL)
-        elseif arg === :inet
-            domains |= UInt(Lib.FLIDOMAIN_INET)
-        elseif arg === :serial_19200
-            domains |= UInt(Lib.FLIDOMAIN_SERIAL_19200)
-        elseif arg === :serial_1200
-            domains |= UInt(Lib.FLIDOMAIN_SERIAL_1200)
-        elseif arg === :camera
-            domains |= UInt(Lib.FLIDEVICE_CAMERA)
-        elseif arg === :filterwheel
-            domains |= UInt(Lib.FLIDEVICE_FILTERWHEEL)
-        elseif arg === :hs_filterwheel
-            domains |= UInt(Lib.FLIDEVICE_HS_FILTERWHEEL)
-        elseif arg === :raw
-            domains |= UInt(Lib.FLIDEVICE_RAW)
-        elseif arg === :enumerate_by_connection
-            domains |= UInt(Lib.FLIDEVICE_ENUMERATE_BY_CONNECTION)
-        elseif arg !== :none
-            error("unknown interface or device type `:$arg`")
-        end
-    end
-    @check FLICreateList(domains)
+    bits = encode_domain(args...)
+    @check FLICreateList(bits)
     try
         len = 260
         domr = Ref{Lib.flidomain_t}()
@@ -761,7 +843,8 @@ For example:
 list_devices(args::Symbol...) = list_devices(stdout, args...)
 function list_devices(io::IO, args::Symbol...)
     foreach_device(args...) do domain, filename, devname
-        println(io, "File: \"$filename\", name: \"$devname\", domain: $domain")
+        print(io, "File: \"$filename\", name: \"$devname\", domain: ",
+              (domain % UInt16), " ", decode_domain(domain))
         if (domain & Lib.FLIDEVICE_CAMERA) != 0
             dev = Device(filename, domain)
             FLI.print_camera_info(io, dev)
@@ -896,7 +979,7 @@ end
 
 function read_user_eeprom!(obj::Device, loc::Symbol, address::Integer,
                            data::Vector{UInt8})
-    @check FLIReadUserEEPROM(obj.dev, parse_eeprom_location(loc),
+    @check FLIReadUserEEPROM(obj.dev, encode_eeprom_location(loc),
                              address, sizeof(data), data)
     return data
 end
@@ -909,11 +992,11 @@ writes user EEPROM.
 """
 function write_user_eeprom(obj::Device, loc::Symbol, address::Integer,
                            data::Vector{UInt8})
-    @check FLIWriteUserEEPROM(obj.dev, parse_eeprom_location(loc),
+    @check FLIWriteUserEEPROM(obj.dev, encode_eeprom_location(loc),
                               address, sizeof(data), data)
 end
 
-parse_eeprom_location(sym::Symbol) = (
+encode_eeprom_location(sym::Symbol) = (
     sym === :user ? Lib.FLI_EEPROM_USER :
     sym === :pixel_map ? Lib.FLI_EEPROM_PIXEL_MAP :
     error("unknown EEPROM location"))
