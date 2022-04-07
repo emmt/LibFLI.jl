@@ -201,3 +201,62 @@ function configure_camera(cam::Device;
     shutter === nothing || control_shutter(cam, shutter)
     nothing
 end
+
+"""
+    FLI.take_image([T=UInt16,] cam) -> img
+
+starts an exposure with camera `cam`, waits for the exposure to complete, and
+returns the acquired image.  Optional argument `T` is to specify the pixel type
+(either `UInt8` or `UInt16`).  Specifying the wrong pixel type may result in
+unexpected pixel values.
+
+The current camera settings are used for the image, they can be changed prior
+to taking the image with [`FLI.cobfigure_camera`](@ref).
+
+"""
+take_image(cam::Device) = take_image(UInt16, cam)
+
+function take_image(T::Type{<:PixelType}, cam::Device)
+    start_exposure_and_wait(cam)
+    return grab_frame(T, cam)
+end
+
+"""
+    FLI.take_image!(cam, img) -> img
+
+starts an exposure with camera `cam`, waits for the exposure to complete, and
+stores the acquired image in `img` which is returned.
+
+The current camera settings are used for the image, they can be changed prior
+to taking the image with [`FLI.cobfigure_camera`](@ref).
+
+"""
+function take_image!(cam::Device, img::Matrix{<:PixelType})
+    width, x0, xbin, height, y0, ybin = get_readout_dimensions(cam)
+    size(img) == (width, height) || error(
+        "destination image has incompatible dimensions")
+    start_exposure_and_wait(cam)
+    return unsafe_grab_frame!(cam, img)
+end
+
+"""
+    FLI.start_exposure_and_wait(cam)
+
+starts an exposure with camera `cam` and waits for the exposure to complete.
+
+The current camera settings are used for the image, they can be changed prior
+to starting the exposure with [`FLI.cobfigure_camera`](@ref).
+
+"""
+function start_exposure_and_wait(cam::Device)
+    set_tdi(cam, 0, 0) # FIXME: why?
+    expose_frame(cam)
+    while true
+        secs = get_exposure_status(cam)
+        if secs == 0
+            break
+        end
+        sleep(secs)
+    end
+    nothing
+end

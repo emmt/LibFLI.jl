@@ -26,6 +26,20 @@ for `LibFLI`.  This simplifies the writing of code as it allows you to write
 want this feature, call `import LibFLI` instead.
 
 
+### Naming conventions
+
+The API attempts to reflect that of the C library.  For readability, function
+names are in [*snake case*](https://en.wikipedia.org/wiki/Snake_case) style and
+without the `FLI` prefix (which is replaced by the name of the module); as an
+example, `FLITriggerExposure` becomes `FLI.trigger_exposure`.  Constants are
+replaced by symbolic names.  For example:
+
+```julia
+FLI.set_fan_speed(cam, :on)  # to switch the fan on
+FLI.set_fan_speed(cam, :off) # to switch the fan off
+```
+
+
 ### Camera configuration
 
 Camera settings can be tuned individually via the functions of the SDK.  For
@@ -87,18 +101,40 @@ which takes the settings as any of the following keywords:
   `:external_exposure_control`);
 
 
-### Naming conventions
+### Taking images
 
-The API attempts to reflect that of the C library.  For readability, function
-names are in [*snake case*](https://en.wikipedia.org/wiki/Snake_case) style and
-without the `FLI` prefix (which is replaced by the name of the module); as an
-example, `FLITriggerExposure` becomes `FLI.trigger_exposure`.  Constants are
-replaced by symbolic names.  For example:
+To take an image with camera `cam`, call:
 
 ```julia
-FLI.set_fan_speed(cam, :on)  # to switch the fan on
-FLI.set_fan_speed(cam, :off) # to switch the fan off
+img = FLI.take_image(cam)
 ```
+
+which starts an exposure, waits for this exposure to complete, and returns the
+acquired image.
+
+The pixel type, say `T`, may be specified:
+
+
+```julia
+img = FLI.take_image(T, cam)
+```
+
+will yield an image whose pixels have type `T`.  If unspecifed, `T = UInt16` is
+assumed.  Beware that using the wrong pixel type may result in unexpected pixel
+values (an internal buffer is however used to prevent segmentation faults).
+
+The current camera settings (pixel type, exposure time, etc.) are used for the
+image, they can be changed prior to taking the image with
+`FLI.cobfigure_camera` (see above).
+
+To avoid allocations, an exiting image can be reused with:
+
+```julia
+img = FLI.take_image!(cam, img)
+```
+
+which behaves as `FLI.take_image` except that is stores the acquired image in
+`img` (and returns it).
 
 
 ### Connected devices
