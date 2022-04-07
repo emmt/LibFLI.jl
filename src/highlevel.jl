@@ -30,9 +30,9 @@ function print_camera_info(io::IO, cam::Device; pfx1 = " ├─ ", pfx2 = " └�
     width, x0, xbin, height, y0, ybin = get_readout_dimensions(cam)
     print(io, pfx1, "Image Area: $width × $height pixels at ",
           "offsets ($x0,$y0) and with $xbin×$ybin binning\n")
-    xsize, ysize = get_pixel_size(cam)
-    print(io, pfx1, "Pixel Size: $(1e6*xsize) µm × $(1e6*ysize) µm\n")
-    print(io, pfx2, "Temperature: $(get_temperature(cam))°C\n")
+    @printf(io, "%sPixel Size: %.1f µm × %.1f µm\n", pfx1,
+            (get_pixel_size(cam) .* 1e6)...)
+    @printf(io, "%sTemperature: %.1f°C\n", pfx2, get_temperature(cam))
 end
 
 """
