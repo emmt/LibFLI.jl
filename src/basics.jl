@@ -685,8 +685,8 @@ control_background_flush(cam::Device, ctrl::Symbol) =
     @check FLIControlBackgroundFlush(cam.dev, encode_background_flush(ctrl))
 
 encode_background_flush(sym::Symbol) = (
-    sym === :stop ? FLI_BGFLUSH_STOP :
-    sym === :start ? FLI_BGFLUSH_START :
+    sym === :stop  ? Lib.FLI_BGFLUSH_STOP :
+    sym === :start ? Lib.FLI_BGFLUSH_START :
     error("unknown background flush control"))
 
 set_dac(obj::Device, dacset::Integer) =
